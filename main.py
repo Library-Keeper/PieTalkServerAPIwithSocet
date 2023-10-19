@@ -1,7 +1,8 @@
-import os
-import sqlite3
-from fastapi import FastAPI, WebSocket
+from fastapi import Depends, FastAPI, HTTPException
+from sqlalchemy.orm import Session
 
+import crud, models, schemas
+from database import SessionLocal, engine
 
 '''
 PieTalkServerAPIwithSocket - серверная часть мессенджера для курсовой работы
@@ -21,49 +22,49 @@ PieTalkServerAPIwithSocket - серверная часть мессенджер�
 '''
 
 
-'''
-Подключение к БД и её создания в случает отсутствия.
-Плюс создание курсора для взаимодействия
-'''
+models.Base.metadata.create_all(bind=engine)
 
-connectionSQL = sqlite3.connect('PieTalkDB_MAIN.db')
-cursor = connectionSQL.cursor()
+app = FastAPI()
 
-
-cursor.execute('''
-CREATE TABLE IF NOT EXISTS Users (
-id VARCHAR(127) PRIMARY KEY,
-login TEXT NOT NULL UNIQUE,
-username TEXT NOT NULL,
-email TEXT NOT NULL UNIQUE,
-age INTEGER,
-description VARCHAR(1023),
-status SMALLINT
-)
-''')
+# Зависимость
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
-cursor.execute('''
-CREATE TABLE IF NOT EXISTS Accounts (
-id VARCHAR(127) PRIMARY KEY,
-login TEXT UNIQUE,
-password TEXT NOT NULL,
-email TEXT NOT NULL UNIQUE
-)
-''')
+@app.post('/users/')
+def create_account(account: schemas.AccountCreate, db: Session = Depends(get_db)):
+    db_account = crud.getUserByEmail(db, email=account.email)
+    if db_account:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    return crud.createAccount(db, account=account)
 
 
-cursor.execute('''
-CREATE TABLE IF NOT EXISTS Messages (
-msg_id VARCHAR(127) PRIMARY KEY,
-from_id TEXT NOT NULL UNIQUE,
-to_id TEXT NOT NULL UNIQUE,
-message TEXT NOT NULL
-)
-''')
+@app.get("/users/")
+def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    users = crud.getUsers(db, skip=skip, limit=limit)
+    return users
 
 
-connectionSQL.commit()
 
 
-connectionSQL.close()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
