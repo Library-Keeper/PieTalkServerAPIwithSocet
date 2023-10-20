@@ -27,6 +27,7 @@ models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
+
 # Зависимость
 def get_db():
     db = SessionLocal()
@@ -67,7 +68,7 @@ def searchUserByUsername(username: str, db: Session = Depends(get_db)):
     return user
 
 
-@app.post("/user/change/username/")
+@app.post("/user/change/username/", name="Change username")
 def changeUsername(user_id: int, username: str, db: Session = Depends(get_db)):
     user = crud.changeUsernameByUserID(db,user_id=user_id, username=username)
     return user
