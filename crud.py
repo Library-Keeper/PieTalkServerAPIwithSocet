@@ -1,3 +1,4 @@
+import sqlalchemy
 from sqlalchemy.orm import Session
 
 import models
@@ -24,10 +25,16 @@ def getUserByLogin(db: Session, user_login: str):
     return db.query(models.User).filter(models.User.login == user_login).first()
 
 
+def changeUsernameByUserID(db: Session, user_id: int, username: str):
+    user = db.execute(sqlalchemy.select(models.User).filter(models.User.id == user_id)).scalar_one()
+    user.username = username
+    db.commit()
+
+
 def createAccount(db: Session, account: schemas.AccountCreate):
     fake_hashed_password = account.password
     db_account = models.Account(login=account.login, password=fake_hashed_password, email=account.email)
-    db_user = models.User(id=db_account.id, login=db_account.login, email=db_account.email)
+    db_user = models.User(id=db_account.id, login=db_account.login, email=db_account.email, status=0)
     db.add(db_account)
     db.commit()
     db.refresh(db_account)
@@ -35,7 +42,7 @@ def createAccount(db: Session, account: schemas.AccountCreate):
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
-    return db_account, db_user
+    return db_user
 
 
 def createMessage(db: Session, message: schemas.MessagesCreate):
@@ -44,6 +51,10 @@ def createMessage(db: Session, message: schemas.MessagesCreate):
     db.commit()
     db.refresh(db_msg)
     return db_msg
+
+
+
+
 
 
 

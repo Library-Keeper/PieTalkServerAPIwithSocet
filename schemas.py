@@ -32,7 +32,7 @@ class AccountCreate(AccountBase):
 
 
 class MessagesBase(BaseModel):
-    msg_id: int
+    pass
 
 
 class MessagesCreate(MessagesBase):

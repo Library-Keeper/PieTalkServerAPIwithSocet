@@ -1,5 +1,6 @@
 from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy.orm import Session
+from typing import List
 
 import crud, models, schemas
 from database import SessionLocal, engine
@@ -35,20 +36,41 @@ def get_db():
         db.close()
 
 
-@app.post('/users/')
-def create_account(account: schemas.AccountCreate, db: Session = Depends(get_db)):
+@app.post('/msg/create/', name="Message create")
+def createMessage(message: schemas.MessagesCreate, db: Session = Depends(get_db)):
+    return crud.createMessage(db, message=message)
+
+
+@app.post('/user/create/', name="Account create")
+def createAccount(account: schemas.AccountCreate, db: Session = Depends(get_db)):
     db_account = crud.getUserByEmail(db, email=account.email)
     if db_account:
         raise HTTPException(status_code=400, detail="Email already registered")
     return crud.createAccount(db, account=account)
 
 
-@app.get("/users/")
+@app.get("/users/", name="Get user list")
 def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     users = crud.getUsers(db, skip=skip, limit=limit)
     return users
 
 
+@app.get("/user/id/{uid}", name="Get user by ID")
+def searchUserByID(uid: int, db: Session = Depends(get_db)):
+    user = crud.getUserByID(db, user_id=uid)
+    return user
+
+
+@app.get("/user/username/{username}", name="Get user by username")
+def searchUserByUsername(username: str, db: Session = Depends(get_db)):
+    user = crud.getUserByUsername(db, username=username)
+    return user
+
+
+@app.post("/user/change/username/")
+def changeUsername(user_id: int, username: str, db: Session = Depends(get_db)):
+    user = crud.changeUsernameByUserID(db,user_id=user_id, username=username)
+    return user
 
 
 

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, ForeignKey, BIGINT, String, SmallInteger, DATE, Integer
+from sqlalchemy import Column, ForeignKey, String, SmallInteger, DATE, Integer
 from sqlalchemy.orm import relationship
 from database import Base
 
@@ -56,7 +56,7 @@ message  - отправленное сообщение
 class Message(Base):
     __tablename__ = "Messages"
 
-    msg_id = Column(BIGINT, primary_key=True, index=True, autoincrement=True)
+    msg_id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     from_id = Column(Integer)
     to_id = Column(Integer)
-    message = Column(String, index=True)
+    message = Column(String)
