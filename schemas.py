@@ -3,14 +3,19 @@ from pydantic import BaseModel
 from datetime import date
 
 
+'''
+Структуры для создания записей в таблицах
+'''
+
+
 class UserBase(BaseModel):
     pass
 
 
 class UserCreate(UserBase):
     login: str
-    username: str = None
     email: str
+    username: str = None
     date_birth: Union[date, None] = None
     description: Union[str, None] = None
 
@@ -18,30 +23,42 @@ class UserCreate(UserBase):
         orm_mode = True
 
 
+class UserChange(UserBase):
+    id: int
+    session: str
+
+
+class UserChangeUsername(UserChange):
+    username: str
+
+
+class UserChangePassword(UserChange):
+    old_pass: str
+    new_pass: str
+
+
 class AccountBase(BaseModel):
-    pass
+    login: str
+    password: str
 
 
 class AccountCreate(AccountBase):
-    login: str
     email: str
-    password: str
 
     class Config:
         orm_mode = True
 
 
-class MessagesBase(BaseModel):
-    pass
+class AccountLogout(AccountBase):
+    session: str
 
 
-class MessagesCreate(MessagesBase):
-
+class MessagesCreate(BaseModel):
+    session: str
     from_id: int
     to_id: int
     message: str
 
     class Config:
         orm_mode = True
-
 

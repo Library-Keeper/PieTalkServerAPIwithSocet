@@ -1,8 +1,9 @@
 from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
+from passlib.hash import pbkdf2_sha512
 
-import crud, models, schemas
+import crud, models, schemas, uuid
 from database import SessionLocal, engine
 
 '''
@@ -69,10 +70,51 @@ def searchUserByUsername(username: str, db: Session = Depends(get_db)):
 
 
 @app.post("/user/change/username/", name="Change username")
-def changeUsername(user_id: int, username: str, db: Session = Depends(get_db)):
-    user = crud.changeUsernameByUserID(db,user_id=user_id, username=username)
-    return user
+def changeUsername(UserChange: schemas.UserChangeUsername, db: Session = Depends(get_db)):
+    acc = crud.getAccountByID(db, UserChange.id)
+    if acc.session != UserChange.session:
+        raise HTTPException(status_code=400, detail="Session error")
+    user = crud.getUserByID(db, UserChange.id)
+    user.username = UserChange.username
+    db.commit()
+    return crud.getUserByID(db, UserChange.id)
 
+
+@app.post("/user/change/password/", name="Change password")
+def changePassword(user: schemas.UserChangePassword, db: Session = Depends(get_db)):
+    acc = crud.getAccountByID(db, acc_id=user.id)
+    if acc.session != user.session:
+        raise HTTPException(status_code=400, detail="Session error")
+    if not pbkdf2_sha512.verify(user.old_pass, acc.password) or user.old_pass == user.new_pass:
+        raise HTTPException(status_code=400, detail="Wrong login or password")
+    acc.password = pbkdf2_sha512.hash(user.new_pass)
+    db.commit()
+
+
+@app.post("/user/login", name="User login in account")
+def login(account: schemas.AccountBase, db: Session = Depends(get_db)):
+    acc = crud.getAccountByLogin(db, login=account.login)
+    if not acc:
+        return {"command": "login_error"}
+    if not (pbkdf2_sha512.verify(account.password, acc.password)):
+        return {"command": "login_error"}
+    acc.session = str(uuid.uuid4())
+    db.commit()
+    return crud.getAccountByLogin(db, login=account.login)
+
+
+@app.post("/user/logout", name="User logout")
+def logout(account: schemas.AccountLogout, db: Session = Depends(get_db)):
+    acc = crud.getAccountByLogin(db, login=account.login)
+    if not acc:
+        raise HTTPException(status_code=400, detail="Wrong login, password or session code")
+    if not (pbkdf2_sha512.verify(account.password, acc.password)):
+        raise HTTPException(status_code=400, detail="Wrong login, password or session code")
+    if acc.session != account.session:
+        raise HTTPException(status_code=400, detail="Wrong login, password or session code")
+    acc.session = None
+    db.commit()
+    return {"command": "logout"}
 
 
 

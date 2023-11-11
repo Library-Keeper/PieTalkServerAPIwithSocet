@@ -1,6 +1,8 @@
 import sqlalchemy
 from sqlalchemy.orm import Session
 
+from passlib.hash import pbkdf2_sha512
+
 import models
 import schemas
 
@@ -25,15 +27,17 @@ def getUserByLogin(db: Session, user_login: str):
     return db.query(models.User).filter(models.User.login == user_login).first()
 
 
-def changeUsernameByUserID(db: Session, user_id: int, username: str):
-    user = db.execute(sqlalchemy.select(models.User).filter(models.User.id == user_id)).scalar_one()
-    user.username = username
-    db.commit()
+def getAccountByID(db: Session, acc_id: int):
+    return db.query(models.Account).filter(models.Account.id == acc_id).first()
+
+
+def getAccountByLogin(db: Session, login: str):
+    return db.query(models.Account).filter(models.Account.login == login).first()
 
 
 def createAccount(db: Session, account: schemas.AccountCreate):
-    fake_hashed_password = account.password
-    db_account = models.Account(login=account.login, password=fake_hashed_password, email=account.email)
+    hashed_password = pbkdf2_sha512.hash(account.password)
+    db_account = models.Account(login=account.login, password=hashed_password, email=account.email)
     db_user = models.User(id=db_account.id, login=db_account.login, email=db_account.email, status=0)
     db.add(db_account)
     db.commit()
@@ -46,6 +50,9 @@ def createAccount(db: Session, account: schemas.AccountCreate):
 
 
 def createMessage(db: Session, message: schemas.MessagesCreate):
+    acc = getAccountByID(db, message.from_id)
+    if acc.session != message.session:
+        return {"detail": "Session error"}
     db_msg = models.Message(from_id=message.from_id, to_id=message.to_id, message=message.message)
     db.add(db_msg)
     db.commit()
