@@ -1,7 +1,7 @@
 from typing import Union
 from pydantic import BaseModel
-from datetime import date
-
+from sqlalchemy import Date
+import datetime
 
 '''
 Структуры для создания записей в таблицах
@@ -9,56 +9,53 @@ from datetime import date
 
 
 class UserBase(BaseModel):
-    pass
+    email: str
 
 
 class UserCreate(UserBase):
-    login: str
-    email: str
-    username: str = None
-    date_birth: Union[date, None] = None
-    description: Union[str, None] = None
-
-    class Config:
-        orm_mode = True
-
-
-class UserChange(UserBase):
-    id: int
-    session: str
-
-
-class UserChangeUsername(UserChange):
-    username: str
-
-
-class UserChangePassword(UserChange):
-    old_pass: str
-    new_pass: str
-
-
-class AccountBase(BaseModel):
-    login: str
     password: str
 
 
-class AccountCreate(AccountBase):
-    email: str
+class User(UserBase):
+    id: str
+    login: str
+    username: str
+    date_birth: datetime.date
+    description: str
+    stats: str
 
     class Config:
         orm_mode = True
 
 
-class AccountLogout(AccountBase):
+class MessageBase(BaseModel):
+    content: str
+    from_id: str
+    to_id: str
+
+
+class MessageCreate(MessageBase):
     session: str
 
 
-class MessagesCreate(BaseModel):
-    session: str
-    from_id: int
-    to_id: int
-    message: str
+class Message(MessageBase):
+    msg_id: int
+    timestamp: datetime.datetime
 
     class Config:
         orm_mode = True
 
+
+class GroupCreate(BaseModel):
+    group_name: str
+
+
+class Group(GroupCreate):
+    group_id: str
+    owner_id: str
+    created_at: datetime.datetime
+
+
+class GroupJoin(BaseModel):
+    group_id: str
+    user_id: str

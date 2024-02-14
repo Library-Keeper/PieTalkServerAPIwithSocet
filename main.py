@@ -1,7 +1,12 @@
 from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from passlib.hash import pbkdf2_sha512
+
+from fastapi import FastAPI, Request, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 import crud, models, schemas, uuid
 from database import SessionLocal, engine
@@ -14,15 +19,18 @@ PieTalkServerAPIwithSocket - серверная часть мессенджер�
 Клиентская часть дла Android будет написана на Kotlin и возможно с примесью Java
 Клиентская часть дла Windows будет написана на Python использую скорее всего PyQt5
 
-В Данном проекте будет 1 БД(база данных). А в ней уже 3 таблицы:
+В Данном проекте будет 1 БД(база данных). А в ней уже 5 таблиц:
 1) Users - общая информация о пользователе, все что здесь указанно будет в открытом 
     доступе (кроме email)
-2) Accounts - таблица которая будет хранить логин и пароль(хеш) от аккаунта. 
-    Информация с этой таблицы будет в закрытом доступе. И возможно с шифрованием.
-3) Messages - таблица со всеми сообщениями. Доступ можно будет получить только к
+2) Messages - таблица со всеми сообщениями. Доступ можно будет получить только к
     сообщениям в который указан id вашего аккаунта
-'''
+3) Groups - таблица для с информацией о чата/группах
+4) GroupMembers - таблица с информацией в каких чата/группах участвует пользователь
+5) Attachments* - Таблица с вложениями к сообщениям от пользователя
 
+
+* - есть шанс что мне лень и я это не сделаю
+'''
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -38,98 +46,131 @@ def get_db():
         db.close()
 
 
-@app.post('/msg/create/', name="Message create")
-def createMessage(message: schemas.MessagesCreate, db: Session = Depends(get_db)):
-    return crud.createMessage(db, message=message)
+search = ["email", "id", "login"]
 
 
-@app.post('/user/create/', name="Account create")
-def createAccount(account: schemas.AccountCreate, db: Session = Depends(get_db)):
-    db_account = crud.getUserByEmail(db, email=account.email)
-    if db_account:
+@app.post("/user/create/")
+def create_user(email:str, password:str, db: Session = Depends(get_db)):
+    """
+    Создает аккаунт на основе, пароля и почты\n
+    -------\n
+    email - почта нового пользователя\n
+    password - пароль от нового аккаунта
+    """
+
+    db_user = crud.get_user_by_email(db, email=email)
+    if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
-    return crud.createAccount(db, account=account)
+    return crud.create_user(db, email, password)
 
 
-@app.get("/users/", name="Get user list")
-def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    users = crud.getUsers(db, skip=skip, limit=limit)
-    return users
+@app.get("/user/search/")
+def search_user(search_by: str, search_string: str, db: Session = Depends(get_db)):
+    """
+    Поиск пользователей по критериям\n
+    -------\n
+    search_by == "email" -> Возвращает пользователя по почте\n
+    search_by == "id" -> Возвращает пользователя по ID\n
+    search_by == "login" -> Возвращает пользователя по логину\n
+    -------\n
+    В иных случаях возвращает ошибку
+    """
+
+    if not search_by in search:
+        return {"error": "search_by error"}
+    if search_by == search[0]:
+        return crud.get_user_by_email(db=db, email=search_string)
+    if search_by == search[1]:
+        return crud.get_user(db=db, user_id=search_string)
+    if search_by == search[2]:
+        return crud.get_user_by_login(db=db, login=search_string)
 
 
-@app.get("/user/id/{uid}", name="Get user by ID")
-def searchUserByID(uid: int, db: Session = Depends(get_db)):
-    user = crud.getUserByID(db, user_id=uid)
-    return user
+@app.post("/user/change/login/")
+def change_user_login(user_id: str, login: str, password: str, sessoin: str, db: Session = Depends(get_db)):
+    """
+    Позволяет изменить пользовательский логин\n
+    -------\n
+    user_id - id пользователя\n
+    login - новый логин\n
+    password - пароль от аккаунта\n
+    session - код текущей сессии
+    """
+
+    return crud.change_user_login(db, user_id, login, password, sessoin)
 
 
-@app.get("/user/username/{username}", name="Get user by username")
-def searchUserByUsername(username: str, db: Session = Depends(get_db)):
-    user = crud.getUserByUsername(db, username=username)
-    return user
+@app.post("/user/change/username/")
+def change_user_username(user_id: str, username: str, sessoin: str, db: Session = Depends(get_db)):
+    """
+    Позволяет изменить отображаемое имя\n
+    -------\n
+    user_id - id пользователя\n
+    username - новое отображаемое имя\n
+    session - код текущей сессии\n
+    -------\n
+    username менее важен так что дле его изменения не нужен пароль
+    """
+
+    return crud.change_user_username(db, user_id, username, sessoin)
 
 
-@app.post("/user/change/username/", name="Change username")
-def changeUsername(UserChange: schemas.UserChangeUsername, db: Session = Depends(get_db)):
-    acc = crud.getAccountByID(db, UserChange.id)
-    if acc.session != UserChange.session:
-        raise HTTPException(status_code=400, detail="Session error")
-    user = crud.getUserByID(db, UserChange.id)
-    user.username = UserChange.username
-    db.commit()
-    return crud.getUserByID(db, UserChange.id)
+@app.post("/user/logout")
+def user_logout(user_id: str, session: str, db: Session = Depends(get_db)):
+
+    """
+    Выход с аккаунта\n
+    При выходе удаляется код сессии и статусу пользователя присваивается 0\n
+    -------\n
+    user_id - id пользователя\n
+    session - код текущей сессии
+    """
+
+    return crud.user_logout(db, user_id, session)
 
 
-@app.post("/user/change/password/", name="Change password")
-def changePassword(user: schemas.UserChangePassword, db: Session = Depends(get_db)):
-    acc = crud.getAccountByID(db, acc_id=user.id)
-    if acc.session != user.session:
-        raise HTTPException(status_code=400, detail="Session error")
-    if not pbkdf2_sha512.verify(user.old_pass, acc.password) or user.old_pass == user.new_pass:
-        raise HTTPException(status_code=400, detail="Wrong login or password")
-    acc.password = pbkdf2_sha512.hash(user.new_pass)
-    db.commit()
+@app.post("/user/login")
+def user_login(email: str, password: str, db: Session = Depends(get_db)):
+    """
+    Вход в аккаунт\n
+    При входе в конце выдается новый код сессии\n
+    и статусу пользователя присваивается 1\n
+    -------\n
+    email - email пользователя\n
+    password - пароль от аккаунта
+    """
+
+    return crud.user_login(db, email, password)
 
 
-@app.post("/user/login", name="User login in account")
-def login(account: schemas.AccountBase, db: Session = Depends(get_db)):
-    acc = crud.getAccountByLogin(db, login=account.login)
-    if not acc:
-        return {"command": "login_error"}
-    if not (pbkdf2_sha512.verify(account.password, acc.password)):
-        return {"command": "login_error"}
-    acc.session = str(uuid.uuid4())
-    db.commit()
-    return crud.getAccountByLogin(db, login=account.login)
+@app.post("/msg/send")
+def send_msg(from_id: str, to_id: str, content: str, session: str, db: Session = Depends(get_db)):
+
+    """
+    Отправка сообщений\n
+    Эта функция позволяет отправить сообщение любому пользователю\n
+    -------\n
+    from_id - id пользователя кто отправляет сообщение\n
+    to_id - id пользователя кому отправили сообщение\n
+    content - текст самого сообщения\n
+    session - код текущей сессии от кого сообщение
+    """
 
 
-@app.post("/user/logout", name="User logout")
-def logout(account: schemas.AccountLogout, db: Session = Depends(get_db)):
-    acc = crud.getAccountByLogin(db, login=account.login)
-    if not acc:
-        raise HTTPException(status_code=400, detail="Wrong login, password or session code")
-    if not (pbkdf2_sha512.verify(account.password, acc.password)):
-        raise HTTPException(status_code=400, detail="Wrong login, password or session code")
-    if acc.session != account.session:
-        raise HTTPException(status_code=400, detail="Wrong login, password or session code")
-    acc.session = None
-    db.commit()
-    return {"command": "logout"}
+    return crud.msg_send(db, from_id, to_id, content, session)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+@app.post("/msg/get")
+def get_msg(user_id:str, from_id: str, session: str, skip:int = 0, limit:int=100, db: Session = Depends(get_db)):
+    """
+    Получение списка сообщений\n
+    Эта функция позволяет получить список общих с пользователем сосбщений\n
+    -------\n
+    user_id - id пользователя кто получает список сообщений\n
+    from_id - id пользователя из переписки\n
+    session - код текущей сессии от кого сообщение\n
+    skip - сколько сообщений назад (по умолчанию "0")\n
+    limit - количество сообщений за раз (по умолчанию "100")
+    """
+    return crud.get_msg(db, user_id, from_id, session, skip, limit)
 
